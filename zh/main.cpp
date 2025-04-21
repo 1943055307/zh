@@ -14,29 +14,34 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+// Callback functions for handling window resizing, mouse movement, and scroll input
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void processInput(GLFWwindow* window);
-std::string readFile(const char* path);
-GLuint loadHDRTexture(const char* path);
+void processInput(GLFWwindow* window); // Handles keyboard input
+std::string readFile(const char* path); // Reads a file and returns its content as a string
+GLuint loadHDRTexture(const char* path); // Loads an HDR texture from a file
 
+// Global variables for screen dimensions, camera, and timing
 int screenWidth = 2560;
 int screenHeight = 1440;
-xCamera camera(glm::vec3(0.0f, 0.0f, 5.0f));
-float lastX = screenWidth / 2.0f;
-float lastY = screenHeight / 2.0f;
-bool firstMouse = true;
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
-float shCoeffs[9][3];
+xCamera camera(glm::vec3(0.0f, 0.0f, 5.0f)); // Camera positioned at (0, 0, 5)
+float lastX = screenWidth / 2.0f; // Last mouse X position
+float lastY = screenHeight / 2.0f; // Last mouse Y position
+bool firstMouse = true; // Flag to handle the first mouse movement
+float deltaTime = 0.0f; // Time between current and last frame
+float lastFrame = 0.0f; // Time of the last frame
+float shCoeffs[9][3]; // Spherical harmonics coefficients
+float placeWeight;
 
 int main() {
+    // Initialize GLFW and configure OpenGL context
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+    // Create a GLFW window
     GLFWwindow* window = glfwCreateWindow(screenWidth, screenHeight, "SH Sphere", NULL, NULL);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
@@ -44,24 +49,28 @@ int main() {
         return -1;
     }
     glfwMakeContextCurrent(window);
+
+    // Set callback functions for window resizing, mouse movement, and scroll input
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // Disable cursor for FPS-style camera
 
+    // Initialize GLAD to load OpenGL function pointers
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
 
+    // Enable depth testing and sRGB framebuffer
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_FRAMEBUFFER_SRGB);
 
+    // Generate sphere geometry (vertices and indices)
     std::vector<float> vertices;
     std::vector<unsigned int> indices;
     generateSphere(vertices, indices);
 
-    // Object sphere
+    // Setup VAO, VBO, and EBO for the object sphere
     GLuint VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -73,13 +82,14 @@ int main() {
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
-    
+
+    // Define vertex attributes (position and normal)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    // Background sphere (sky)
+    // Setup VAO, VBO, and EBO for the background sphere (sky)
     GLuint skyVAO, skyVBO, skyEBO;
     glGenVertexArrays(1, &skyVAO);
     glGenBuffers(1, &skyVBO);
@@ -92,6 +102,7 @@ int main() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
+    // Load and compile shaders for the object and sky
     std::string vertCode = readFile("shader.vert");
     std::string fragCode = readFile("shader.frag");
     xProgram shader((char*)vertCode.c_str(), (char*)fragCode.c_str());
@@ -100,9 +111,20 @@ int main() {
     std::string skyFrag = readFile("sky.frag");
     xProgram skyShader((char*)skyVert.c_str(), (char*)skyFrag.c_str());
 
-    std::string place = "stpeters";
+    // Load HDR environment map and compute spherical harmonics coefficients
+    std::string place = "galileo";
     std::string floatFile = place + "_probe.float";
     std::string hdrFile = place + "_probe_mine.hdr";
+
+    if (place == "stpeters") {
+        placeWeight = 8.0f;
+    }
+    else if (place == "uffizi") {
+        placeWeight = 0.33f;
+    }
+    else {
+        placeWeight = 1.0f;
+    }
 
     int guessWidth = guessFloatWidth(floatFile.c_str());
     printf("Guessed Width : %d\n", guessWidth);
@@ -111,32 +133,38 @@ int main() {
     convertFloatToHDR(floatFile.c_str(), hdrFile.c_str(), guessWidth);
     GLuint hdrTexture = loadHDRTexture(hdrFile.c_str());
 
-
+    // Scale SH coefficients for rendering
     for (int i = 0; i < 9; i++) {
         printf("%d : ", i);
         for (int j = 0; j < 3; j++) {
-            printf("%lf ", shCoeffs[i][j]);
             shCoeffs[i][j] *= 0.1f;
+            printf("%lf ", shCoeffs[i][j]);
         }
-        printf("\n");       
+        printf("\n");
     }
-    glUseProgram(shader.program); 
+    glUseProgram(shader.program);
+    glUniform1f(glGetUniformLocation(shader.program, "weight"), placeWeight);
     glUniform3fv(glGetUniformLocation(shader.program, "sh"), 9, &shCoeffs[0][0]);
 
+    // Main render loop
     while (!glfwWindowShouldClose(window)) {
+        // Calculate frame time
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-        processInput(window);
 
+        processInput(window); // Handle user input
+
+        // Clear the screen
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // Render the background sphere (sky)
         glDepthFunc(GL_LEQUAL);
         glUseProgram(skyShader.program);
-        glm::mat4 view = glm::mat4(glm::mat3(camera.GetViewMatrix()));
+        glm::mat4 view = glm::mat4(glm::mat3(camera.GetViewMatrix())); // Remove translation for skybox
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)screenWidth / screenHeight, 0.1f, 100.0f);
-        glm::mat4 skyModel = glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
+        glm::mat4 skyModel = glm::scale(glm::mat4(1.0f), glm::vec3(2.0f)); // Scale the sky sphere
         glUniformMatrix4fv(glGetUniformLocation(skyShader.program, "model"), 1, GL_FALSE, glm::value_ptr(skyModel));
         glUniformMatrix4fv(glGetUniformLocation(skyShader.program, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(skyShader.program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
@@ -145,9 +173,10 @@ int main() {
         glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
         glDepthFunc(GL_LESS);
 
+        // Render the object sphere
         glUseProgram(shader.program);
         view = camera.GetViewMatrix();
-        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 model = glm::mat4(1.0f); // Identity model matrix
         glUniformMatrix4fv(glGetUniformLocation(shader.program, "model"), 1, GL_FALSE, glm::value_ptr(model));
         glUniformMatrix4fv(glGetUniformLocation(shader.program, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(shader.program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
@@ -155,14 +184,17 @@ int main() {
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 
+        // Swap buffers and poll events
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
+    // Terminate GLFW
     glfwTerminate();
     return 0;
 }
 
+// Reads a file and returns its content as a string
 std::string readFile(const char* path) {
     std::ifstream file(path);
     std::stringstream buffer;
@@ -170,6 +202,7 @@ std::string readFile(const char* path) {
     return buffer.str();
 }
 
+// Loads an HDR texture from a file
 GLuint loadHDRTexture(const char* path) {
     stbi_set_flip_vertically_on_load(true);
     int width, height, nrComponents;
@@ -193,10 +226,12 @@ GLuint loadHDRTexture(const char* path) {
     return hdrTex;
 }
 
+// Callback for resizing the window
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+// Callback for mouse movement
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     if (firstMouse) {
         lastX = xpos;
@@ -210,10 +245,12 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
+// Callback for scroll input
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     camera.ProcessMouseScroll((float)yoffset);
 }
 
+// Handles keyboard input
 void processInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);

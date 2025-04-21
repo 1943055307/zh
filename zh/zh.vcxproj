@@ -146,7 +146,12 @@
     <ClInclude Include="xShader.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="beach_probe.float" />
+    <None Include="building_probe.float" />
+    <None Include="campus_probe.float" />
+    <None Include="galileo_probe.float" />
     <None Include="grace_probe.float" />
+    <None Include="kitchen_probe.float" />
     <None Include="rnl_probe.float" />
     <None Include="sky.frag" />
     <None Include="sky.vert" />

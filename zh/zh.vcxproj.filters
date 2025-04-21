@@ -76,5 +76,20 @@
     <None Include="grace_probe.float">
       <Filter>资源文件</Filter>
     </None>
+    <None Include="beach_probe.float">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="campus_probe.float">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="building_probe.float">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="galileo_probe.float">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="kitchen_probe.float">
+      <Filter>资源文件</Filter>
+    </None>
   </ItemGroup>
 </Project>
