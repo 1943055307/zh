@@ -23,8 +23,8 @@ std::string readFile(const char* path); // Reads a file and returns its content 
 GLuint loadHDRTexture(const char* path); // Loads an HDR texture from a file
 
 // Global variables for screen dimensions, camera, and timing
-int screenWidth = 2560;
-int screenHeight = 1440;
+int screenWidth = 5120;
+int screenHeight = 2880;
 xCamera camera(glm::vec3(0.0f, 0.0f, 5.0f)); // Camera positioned at (0, 0, 5)
 float lastX = screenWidth / 2.0f; // Last mouse X position
 float lastY = screenHeight / 2.0f; // Last mouse Y position
@@ -32,7 +32,10 @@ bool firstMouse = true; // Flag to handle the first mouse movement
 float deltaTime = 0.0f; // Time between current and last frame
 float lastFrame = 0.0f; // Time of the last frame
 float shCoeffs[9][3]; // Spherical harmonics coefficients
+float shaderInput[4][3];
+float K2[3];
 float placeWeight;
+const float PI = 3.14159265359;
 
 int main() {
     // Initialize GLFW and configure OpenGL context
@@ -112,7 +115,7 @@ int main() {
     xProgram skyShader((char*)skyVert.c_str(), (char*)skyFrag.c_str());
 
     // Load HDR environment map and compute spherical harmonics coefficients
-    std::string place = "galileo";
+    std::string place = "grace";
     std::string floatFile = place + "_probe.float";
     std::string hdrFile = place + "_probe_mine.hdr";
 
@@ -121,6 +124,9 @@ int main() {
     }
     else if (place == "uffizi") {
         placeWeight = 0.33f;
+    }
+    else if (place == "grace") {
+        placeWeight = 8.0f;
     }
     else {
         placeWeight = 1.0f;
@@ -142,9 +148,42 @@ int main() {
         }
         printf("\n");
     }
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 3; j++) {
+            shaderInput[i][j] = shCoeffs[i][j];
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        K2[i] = 0.0f;
+        float sh0 = shCoeffs[0][i];
+        float sh1 = shCoeffs[1][i];
+        float sh2 = shCoeffs[2][i];
+        float sh3 = shCoeffs[3][i];
+        float sh4 = shCoeffs[4][i];
+        float sh5 = shCoeffs[5][i];
+        float sh6 = shCoeffs[6][i];
+        float sh7 = shCoeffs[7][i];
+        float sh8 = shCoeffs[8][i];
+
+        glm::vec3 optDir = normalize(glm::vec3(-sh3, -sh1, sh2));
+
+        float q4 = sqrt(15.0 / (4.0 * PI)) * optDir.x * optDir.y;
+        float q5 = -sqrt(15.0 / (4.0 * PI)) * optDir.y * optDir.z;
+        float q6 = sqrt(5.0 / (16.0 * PI)) * (3.0 * optDir.z * optDir.z - 1.0);
+        float q7 = -sqrt(15.0 / (4.0 * PI)) * optDir.x * optDir.z;
+        float q8 = sqrt(15.0 / (16.0 * PI)) * (optDir.x * optDir.x - optDir.y * optDir.y);
+
+        K2[i] = q4 * sh4 + q5 * sh5 + q6 * sh6 + q7 * sh7 + q8 * sh8;
+        K2[i] *= sqrt(4.0 * PI / 5.0);
+    }
+    for (int i = 0; i < 3; i++) {
+        printf("%d : %lf\n", i, K2[i]);
+    }
+
     glUseProgram(shader.program);
     glUniform1f(glGetUniformLocation(shader.program, "weight"), placeWeight);
-    glUniform3fv(glGetUniformLocation(shader.program, "sh"), 9, &shCoeffs[0][0]);
+    glUniform3fv(glGetUniformLocation(shader.program, "sh"), 9, &shaderInput[0][0]);
+    glUniform1fv(glGetUniformLocation(shader.program, "k2"), 3, &K2[0]);
 
     // Main render loop
     while (!glfwWindowShouldClose(window)) {

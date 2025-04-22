@@ -1,8 +1,3 @@
-// transfer.cpp
-// This file provides functions for processing HDR (.float) files, 
-// computing spherical harmonics (SH) coefficients, and converting .float files to HDR images.
-// The code assumes little-endian format for binary data.
-
 #define _CRT_SECURE_NO_WARNINGS
 #include "transfer.h"
 #include <stdio.h>
