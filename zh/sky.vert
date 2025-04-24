@@ -8,8 +8,8 @@ uniform mat4 projection;
 
 void main()
 {
-    mat4 rotView = mat4(mat3(view)); // remove translation
+    mat4 rotView = mat4(mat3(view)); 
     vec4 pos = projection * rotView * vec4(aPos, 1.0);
-    gl_Position = pos.xyww; // keep at far plane
-    WorldDir = aPos; // pass direction
+    gl_Position = pos.xyww; 
+    WorldDir = aPos; 
 }
