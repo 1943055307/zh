@@ -13,6 +13,7 @@
 #include <sstream>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include "stb_image_write.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -20,9 +21,10 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
 std::string readFile(const char* path); 
 GLuint loadHDRTexture(const char* path); 
+void saveScreenshot(const std::string& filename, int width, int height);
 
-int screenWidth = 5120;
-int screenHeight = 2880;
+int screenWidth = 1920;
+int screenHeight = 1080;
 xCamera camera(glm::vec3(0.0f, 0.0f, 5.0f)); 
 float lastX = screenWidth / 2.0f; 
 float lastY = screenHeight / 2.0f; 
@@ -31,9 +33,11 @@ float deltaTime = 0.0f;
 float lastFrame = 0.0f; 
 float shCoeffs[9][3]; 
 float shaderInput[4][3];
+float rShaderInput[9][3];
 float K2[3];
 float placeWeight;
 const float PI = 3.14159265359;
+static bool saved = false;
 
 int main() {
     glfwInit();
@@ -102,7 +106,7 @@ int main() {
     std::string skyFrag = readFile("sky.frag");
     xProgram skyShader((char*)skyVert.c_str(), (char*)skyFrag.c_str());
 
-    std::string place = "grace";
+    std::string place = "rnl";
     std::string floatFile = place + "_probe.float";
     std::string hdrFile = place + "_probe_mine.hdr";
 
@@ -130,6 +134,7 @@ int main() {
         printf("%d : ", i);
         for (int j = 0; j < 3; j++) {
             shCoeffs[i][j] *= 0.1f;
+            rShaderInput[i][j] = shCoeffs[i][j];
             printf("%lf ", shCoeffs[i][j]);
         }
         printf("\n");
@@ -169,6 +174,7 @@ int main() {
     glUseProgram(shader.program);
     glUniform1f(glGetUniformLocation(shader.program, "weight"), placeWeight);
     glUniform3fv(glGetUniformLocation(shader.program, "sh"), 9, &shaderInput[0][0]);
+    glUniform3fv(glGetUniformLocation(shader.program, "rsh"), 9, &rShaderInput[0][0]);
     glUniform1fv(glGetUniformLocation(shader.program, "k2"), 3, &K2[0]);
 
     while (!glfwWindowShouldClose(window)) {
@@ -203,6 +209,11 @@ int main() {
         glUniform3fv(glGetUniformLocation(shader.program, "cameraPos"), 1, glm::value_ptr(camera.Position));
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+
+        if (!saved) {
+            saveScreenshot(place + "_SHa.png", screenWidth, screenHeight);
+            saved = true;
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -280,3 +291,24 @@ void processInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
         camera.ProcessKeyboard(DOWN, deltaTime);
 }
+
+void saveScreenshot(const std::string& filename, int width, int height) {
+    int cropWidth = width / 3;
+    int cropHeight = height / 2;
+    int xOffset = (width - cropWidth) / 2;
+    int yOffset = (height - cropHeight) / 2 - 5;
+
+    std::vector<unsigned char> pixels(3 * cropWidth * cropHeight);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(xOffset, yOffset, cropWidth, cropHeight, GL_RGB, GL_UNSIGNED_BYTE, &pixels[0]);
+
+    for (int j = 0; j < cropHeight / 2; ++j) {
+        for (int i = 0; i < cropWidth * 3; ++i) {
+            std::swap(pixels[j * cropWidth * 3 + i], pixels[(cropHeight - j - 1) * cropWidth * 3 + i]);
+        }
+    }
+
+    stbi_write_png(filename.c_str(), cropWidth, cropHeight, 3, &pixels[0], cropWidth * 3);
+    std::cout << "Cropped screenshot saved to: " << filename << std::endl;
+}
+
